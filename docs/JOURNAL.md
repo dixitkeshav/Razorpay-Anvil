@@ -72,3 +72,65 @@ entries only, written as they happen.
   the full 3-day run; threshold_sigma=8 (not the textbook 3) gets the
   latency episode down to ~1 false alarm/day. Both defaults are documented
   in-code with the reasoning, not just the numbers.
+
+## Phase 4 — 2026-08-24
+
+The longest debugging arc so far, all on one episode (D: a low-volume
+regional incident, `upi x PSP-B x Rajasthan`). Each fix below was real and
+each one exposed the next problem:
+
+- **Missing dimension.** The plan's own lattice diagram (method -> +psp ->
+  +issuer -> +region/+merchant) has no BIN dimension, but episode C is
+  defined by a card BIN. Fixed by adding a derived `x_bin_prefix`
+  dimension (`SUBSTR(x_bin, 1, 3)`) to `src/ingest/lattice_levels.py` —
+  extending ingest/detection infrastructure is allowed; the frozen
+  generator was never touched.
+- **Parent-level dilution.** D's true cause affects ~85 attempts inside a
+  window where the "upi" aggregate sees ~800 — its aggregate deficit
+  rounds to 0, so the original "if parent deficit <= 0, give up" logic
+  reported nothing to explain. Fixed by always running one round of
+  per-dimension search regardless of the parent's own diluted deficit, and
+  adopting whatever real localized deficit that round finds as the new
+  reference instead of a false negative.
+- **Premature stop after adoption.** Once adopted, that reference trivially
+  "covers itself" (fraction=1.0), which tripped the normal
+  coverage-reached stopping rule immediately — never checking whether a
+  second dimension (the true cause needs two: psp AND region) would
+  refine the cut further. Fixed by forcing one extra round after any
+  adoption before the coverage gate is allowed to stop the search.
+- **Volume-biased ranking.** Ranking candidates by raw excess-failure count
+  picked a PSP with 42 attempts and a small real gap over the actual-cause
+  PSP with 22 attempts and a much larger gap — deficit is volume-weighted,
+  so more traffic can out-rank more damage. Fixed by ranking on p-value
+  (statistical strength) instead.
+- **Multiple comparisons.** Picking the single smallest p-value across ~37
+  simultaneous dimension x value tests is exactly the trap detection's
+  per-level BH exists to avoid — some unrelated slice will look
+  significant by chance. Added the same BH correction to attribution's
+  round-by-round candidate selection.
+- **Borrowed baseline.** Even after BH, a specific merchant (M141, nothing
+  to do with D) kept winning because it was tested against the *parent's*
+  blanket baseline SR rather than its own — a merchant with a normally
+  slightly-lower rate reads as "anomalous" against a global average it was
+  never really part of. Fixed by giving every candidate its own
+  pre/post-window historical baseline, computed from the same slice
+  filter, falling back to the parent baseline only when a candidate has
+  too little history of its own.
+- **Not sustained.** M141 *still* won even against its own baseline. Split
+  the window in half to check: M141's SR was 1.00 in the first half and
+  0.59 in the second — a lucky/unlucky split, not a real incident. The
+  true cause (Rajasthan x PSP-B) was degraded in *both* halves (0.78 and
+  0.85). Added a sustained-degradation requirement — both halves must
+  individually sit below the candidate's own baseline — as the final
+  gate. Real incidents degrade the whole window; noise flukes concentrate
+  in whichever half got unlucky.
+
+After all six fixes, D correctly resolves to `{method: upi, region:
+Rajasthan}` — a genuinely correct partial match. It doesn't recover `psp:
+PSP-B` on top of that, because splitting the already-thin 85-attempt
+Rajasthan sample three ways by PSP leaves too little evidence to justify
+the extra claim — an honest "over-broad, not wrong" outcome for a
+Hard-tier, low-volume episode, exactly the failure mode the tier is
+supposed to produce. A, C, E, and both halves of G were correct without
+needing any of these fixes to be episode-specific — none of the six
+changes reference D, ep-A, or any other episode by name.
