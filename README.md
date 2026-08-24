@@ -11,8 +11,10 @@ Anvil is not a routing model, a fraud detector, or a subscription-recovery
 agent. See `docs/NON-GOALS.md` for the full list of what this deliberately
 is not, and why.
 
-Build status: **Phase 0 — scaffold.** See `docs/PHASES.md` for the full
-15-phase plan and gates.
+Build status: **Floor complete (Phases 0-8).** `make eval` emits a real
+rupee recovery figure — see `docs/RESULTS.md` (generated). See
+`docs/PHASES.md` for the full 15-phase plan and gates; Phases 9-12 (LLM
+explanation, decision-quality monitor, MCP server, dashboard) are next.
 
 ---
 
@@ -39,14 +41,13 @@ from requirement to where the evidence will live.
 ```bash
 cp .env.example .env   # fill in Razorpay test-mode keys + Groq key
 make install
-make test-phase-0      # verifies Razorpay test-mode auth works
+make test             # full suite, all phase gates through Phase 8
+make eval              # regenerates docs/RESULTS.md from the committed seed
 ```
 
-Once later phases land:
-
-```bash
-make reproduce          # seed + eval + sweep, deterministic
-```
+`make sweep` (the sensitivity heatmap) and the held-out set land at Phase
+13 — `make reproduce` (which chains `seed`, `eval`, and `sweep`) will work
+end-to-end once that phase is in.
 
 will regenerate every number in `docs/RESULTS.md` and `docs/SENSITIVITY.md`
 from a clean clone.
