@@ -1,0 +1,73 @@
+"""1-minute-bucket x slice-lattice rollups — L1. attempts, successes, SR,
+P50/P95/P99 latency, timeout_rate, retry_rate.
+"""
+
+import duckdb
+import polars as pl
+
+from src.ingest.lattice_levels import ALLOWED_DIMS
+
+_METRICS_SQL = """
+    COUNT(*) AS attempts,
+    SUM(CASE WHEN status = 'captured' THEN 1 ELSE 0 END) AS successes,
+    SUM(CASE WHEN status = 'captured' THEN 1 ELSE 0 END)::DOUBLE / COUNT(*) AS success_rate,
+    QUANTILE_CONT(x_latency_ms, 0.5) AS p50_latency_ms,
+    QUANTILE_CONT(x_latency_ms, 0.95) AS p95_latency_ms,
+    QUANTILE_CONT(x_latency_ms, 0.99) AS p99_latency_ms,
+    SUM(CASE WHEN error_reason LIKE '%timeout%' THEN 1 ELSE 0 END)::DOUBLE / COUNT(*)
+        AS timeout_rate,
+    SUM(CASE WHEN x_attempt_number > 1 THEN 1 ELSE 0 END)::DOUBLE / COUNT(*) AS retry_rate
+"""
+
+EMPTY_STATS = {
+    "attempts": 0,
+    "successes": 0,
+    "success_rate": None,
+    "p50_latency_ms": None,
+    "p95_latency_ms": None,
+    "p99_latency_ms": None,
+    "timeout_rate": None,
+    "retry_rate": None,
+}
+
+
+def _validate_dims(dims: list[str]) -> None:
+    unknown = set(dims) - ALLOWED_DIMS
+    if unknown:
+        raise ValueError(f"unknown slice dimension(s): {unknown}")
+
+
+def rollup(con: duckdb.DuckDBPyConnection, dims: list[str]) -> pl.DataFrame:
+    """Rollup at one lattice level: 1-minute buckets x the given dims."""
+    _validate_dims(dims)
+    group_cols = ", ".join(["minute_bucket", *dims])
+    select_dims = (", ".join(dims) + ",") if dims else ""
+    sql = f"""
+        SELECT
+            CAST(created_at / 60 AS BIGINT) AS minute_bucket,
+            {select_dims}
+            {_METRICS_SQL}
+        FROM events
+        GROUP BY {group_cols}
+        ORDER BY {group_cols}
+    """
+    return con.execute(sql).pl()
+
+
+def slice_stats(
+    con: duckdb.DuckDBPyConnection, minute_bucket: int, slice_filter: dict[str, str]
+) -> dict:
+    """Stats for one exact slice at one exact minute bucket."""
+    _validate_dims(list(slice_filter.keys()))
+    where_clauses = ["CAST(created_at / 60 AS BIGINT) = ?"]
+    params: list = [minute_bucket]
+    for key, value in slice_filter.items():
+        where_clauses.append(f"{key} = ?")
+        params.append(value)
+    where_sql = " AND ".join(where_clauses)
+    sql = f"SELECT {_METRICS_SQL} FROM events WHERE {where_sql}"
+
+    result = con.execute(sql, params).pl()
+    if result.height == 0 or result["attempts"][0] == 0:
+        return dict(EMPTY_STATS)
+    return result.row(0, named=True)
