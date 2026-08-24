@@ -186,3 +186,22 @@ changes reference D, ep-A, or any other episode by name.
   cheap signal (CUSUM's alarm bit) is a good *sequential detector* but a
   bad source of truth for "what is happening right now" once its own
   internal memory has decoupled from the present.
+
+## Phase 6 — 2026-08-25
+
+- The build plan's own guardrail bullet list (anvil-build-plan.md §8)
+  names three ESCALATE_HUMAN conditions (amount, confidence, mandate),
+  but docs/PHASES.md's Phase 6 gate — copied from the plan's phase table —
+  says escalation must trigger "on all four documented conditions." Rather
+  than guess which unstated fourth condition was meant, added one that's
+  independently justifiable on its own: no eligible automated action
+  (RETRY and REROUTE both blocked by gates) now escalates instead of
+  silently defaulting to HOLD forever with no path back to a human.
+  Documented as a deliberate addition, not a hidden assumption — see
+  docs/POLICY.md.
+- No bugs this phase, for once. The policy engine is pure, deterministic
+  logic over an explicit input contract (PolicyContext) with no data
+  dependency and no statistical tuning, so it's the first phase where
+  every test passed on the first real run. Worth noting as a contrast to
+  Phases 3-5: determinism plus an explicit contract meant there was
+  nothing left for reality to disagree with.
