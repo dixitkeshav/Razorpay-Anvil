@@ -27,7 +27,7 @@ CANDIDATE_DIMS = ["x_psp", "x_issuer", "x_region", "x_merchant_id", "x_bin_prefi
 def _where(
     slice_filter: dict, window: tuple[int, int], extra: str | None = None
 ) -> tuple[str, list]:
-    clauses = ["CAST(created_at / 60 AS BIGINT) BETWEEN ? AND ?"]
+    clauses = ["(created_at // 60) BETWEEN ? AND ?"]
     params: list = [window[0], window[1]]
     for key, value in slice_filter.items():
         clauses.append(f"{dim_expr(key)} = ?")
@@ -89,9 +89,9 @@ def _decompose_by_dim(
     params = list(slice_filter.values())
 
     mid = (window[0] + window[1]) // 2
-    in_window = f"CAST(created_at / 60 AS BIGINT) BETWEEN {window[0]} AND {window[1]}"
-    in_first_half = f"CAST(created_at / 60 AS BIGINT) BETWEEN {window[0]} AND {mid}"
-    in_second_half = f"CAST(created_at / 60 AS BIGINT) BETWEEN {mid + 1} AND {window[1]}"
+    in_window = f"(created_at // 60) BETWEEN {window[0]} AND {window[1]}"
+    in_first_half = f"(created_at // 60) BETWEEN {window[0]} AND {mid}"
+    in_second_half = f"(created_at // 60) BETWEEN {mid + 1} AND {window[1]}"
     sql = f"""
         SELECT {dim_expr(dim)} AS value,
                SUM(CASE WHEN {in_window} THEN 1 ELSE 0 END) AS window_attempts,
