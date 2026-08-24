@@ -5,7 +5,7 @@ P50/P95/P99 latency, timeout_rate, retry_rate.
 import duckdb
 import polars as pl
 
-from src.ingest.lattice_levels import ALLOWED_DIMS
+from src.ingest.lattice_levels import ALLOWED_DIMS, dim_expr
 
 _METRICS_SQL = """
     COUNT(*) AS attempts,
@@ -40,16 +40,16 @@ def _validate_dims(dims: list[str]) -> None:
 def rollup(con: duckdb.DuckDBPyConnection, dims: list[str]) -> pl.DataFrame:
     """Rollup at one lattice level: 1-minute buckets x the given dims."""
     _validate_dims(dims)
-    group_cols = ", ".join(["minute_bucket", *dims])
-    select_dims = (", ".join(dims) + ",") if dims else ""
+    group_exprs = ", ".join(["CAST(created_at / 60 AS BIGINT)", *(dim_expr(d) for d in dims)])
+    select_dims = (", ".join(f"{dim_expr(d)} AS {d}" for d in dims) + ",") if dims else ""
     sql = f"""
         SELECT
             CAST(created_at / 60 AS BIGINT) AS minute_bucket,
             {select_dims}
             {_METRICS_SQL}
         FROM events
-        GROUP BY {group_cols}
-        ORDER BY {group_cols}
+        GROUP BY {group_exprs}
+        ORDER BY {group_exprs}
     """
     return con.execute(sql).pl()
 
@@ -62,7 +62,7 @@ def slice_stats(
     where_clauses = ["CAST(created_at / 60 AS BIGINT) = ?"]
     params: list = [minute_bucket]
     for key, value in slice_filter.items():
-        where_clauses.append(f"{key} = ?")
+        where_clauses.append(f"{dim_expr(key)} = ?")
         params.append(value)
     where_sql = " AND ".join(where_clauses)
     sql = f"SELECT {_METRICS_SQL} FROM events WHERE {where_sql}"
