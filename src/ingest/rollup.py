@@ -40,11 +40,11 @@ def _validate_dims(dims: list[str]) -> None:
 def rollup(con: duckdb.DuckDBPyConnection, dims: list[str]) -> pl.DataFrame:
     """Rollup at one lattice level: 1-minute buckets x the given dims."""
     _validate_dims(dims)
-    group_exprs = ", ".join(["CAST(created_at / 60 AS BIGINT)", *(dim_expr(d) for d in dims)])
+    group_exprs = ", ".join(["(created_at // 60)", *(dim_expr(d) for d in dims)])
     select_dims = (", ".join(f"{dim_expr(d)} AS {d}" for d in dims) + ",") if dims else ""
     sql = f"""
         SELECT
-            CAST(created_at / 60 AS BIGINT) AS minute_bucket,
+            (created_at // 60) AS minute_bucket,
             {select_dims}
             {_METRICS_SQL}
         FROM events
@@ -59,7 +59,7 @@ def slice_stats(
 ) -> dict:
     """Stats for one exact slice at one exact minute bucket."""
     _validate_dims(list(slice_filter.keys()))
-    where_clauses = ["CAST(created_at / 60 AS BIGINT) = ?"]
+    where_clauses = ["(created_at // 60) = ?"]
     params: list = [minute_bucket]
     for key, value in slice_filter.items():
         where_clauses.append(f"{dim_expr(key)} = ?")
