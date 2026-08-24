@@ -10,7 +10,21 @@ ALLOWED_DIMS = {
     "x_region",
     "x_merchant_id",
     "x_merchant_category",
+    "x_bin_prefix",
 }
+
+# Dimensions that aren't literal event columns get a SQL expression here.
+# x_bin_prefix isn't part of the plan's original lattice diagram (§7 lists
+# method/psp/issuer/region/merchant_category only) — added in Phase 4 once
+# attribution needed to name the card-BIN episode's true cause. See
+# docs/JOURNAL.md.
+DIM_EXPR: dict[str, str] = {
+    "x_bin_prefix": "SUBSTR(x_bin, 1, 3)",
+}
+
+
+def dim_expr(dim: str) -> str:
+    return DIM_EXPR.get(dim, dim)
 
 LEVELS: dict[str, list[str]] = {
     "L0_overall": [],
