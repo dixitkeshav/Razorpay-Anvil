@@ -223,3 +223,42 @@ changes reference D, ep-A, or any other episode by name.
   (call-count instrumented on the SDK client directly) — the ledger short-
   circuits before any network call, so replay safety doesn't depend on
   Razorpay's own dedup behavior, only on ours.
+
+## Phase 8 — 2026-08-25 — FLOOR COMPLETE
+
+- First counterfactual replay run produced a scorecard where every single
+  one of 527 failed attempts got ESCALATE_HUMAN, and the net recovery
+  figure was Rs. 0 — every decision blocked on the low-confidence
+  guardrail. Root cause: the detected incident window came from
+  `detect_incidents()`'s own CUSUM alarm boundary (29671907-29671969, 62
+  minutes), not from ground truth — and it runs ~30 minutes past the true
+  incident's end, into the recovery tail. Attribution's split-half
+  "sustained" check (added in Phase 4 to reject the noise-driven M141
+  false lead) required *both* halves to sit strictly below baseline; the
+  second half here was back near baseline (0.949 vs an own-baseline of
+  0.928) because the incident had genuinely already recovered there, and
+  the strict "<" rejected the entire cut. Attribution fell back to the
+  bare parent slice with no localized cause found, so its `coverage`
+  (used as `root_cause_confidence`) came back as 0 — triggering escalation
+  on every attempt, every time, exactly as designed, on a confidence
+  number that was itself wrong.
+- This is a different failure mode from Phase 4's M141 case, not a
+  reopening of the same bug: M141 was noise (one half anomalously *above*
+  baseline). This was genuine recovery (one half back *near* baseline,
+  not above it). A single "both halves below baseline" rule can't
+  distinguish "the metric legitimately recovered inside this window" from
+  "this half never had a real problem to begin with" — they look
+  identical to a rule that only checks the sign of the gap. Fixed by
+  changing the rule from "both halves below baseline" to "neither half
+  sits meaningfully *above* baseline" (a small, fixed tolerance band):
+  recovery reads as "back to normal," noise reads as "anomalously good,"
+  and the new rule tells those apart instead of conflating them. Verified
+  it doesn't reopen the M141 case (all of tests/test_attribution.py still
+  passes) before trusting the new replay numbers.
+- With that fixed, the same seed produces a real, reproducible figure:
+  245 failed attempts replayed inside the one incident the tuned detector
+  (h=15, zero false alarms) currently catches, 161 recovered, net
+  incremental recovery Rs. 3,31,449.68 after execution cost — written to
+  `docs/RESULTS.md` entirely by `make eval`, nothing hand-typed. The floor
+  is complete: `make eval` emits a real rupee figure, agent-on vs
+  agent-off, from the committed seed.
