@@ -205,3 +205,21 @@ changes reference D, ep-A, or any other episode by name.
   every test passed on the first real run. Worth noting as a contrast to
   Phases 3-5: determinism plus an explicit contract meant there was
   nothing left for reality to disagree with.
+
+## Phase 7 — 2026-08-25
+
+- First draft of `new_idempotency_key()` salted the key with a random
+  UUID per call. That's backwards: an idempotency key exists so that
+  *replaying the same logical operation* (a client retry after a network
+  timeout, a queue redelivery) produces the same key and gets deduplicated
+  — a random salt would make every "replay" look like a brand-new
+  operation, defeating the entire point before it shipped. Caught before
+  writing a single test, by just asking what the key was actually for.
+  Fixed to be deterministic per (payment_id, attempt_number).
+- Otherwise clean. `tests/test_idempotency.py`'s real-Razorpay tests ran
+  against the live test-mode account from `.env` and passed: one real
+  order created via `order.create`, and a second call with the same
+  idempotency key confirmed to never reach the Razorpay API at all
+  (call-count instrumented on the SDK client directly) — the ledger short-
+  circuits before any network call, so replay safety doesn't depend on
+  Razorpay's own dedup behavior, only on ours.
