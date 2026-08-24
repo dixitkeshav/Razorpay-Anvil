@@ -134,3 +134,55 @@ Hard-tier, low-volume episode, exactly the failure mode the tier is
 supposed to produce. A, C, E, and both halves of G were correct without
 needing any of these fixes to be episode-specific — none of the six
 changes reference D, ep-A, or any other episode by name.
+
+## Phase 5 — 2026-08-24
+
+- **A rounding bug that had been silently wrong since Phase 2.** Every
+  minute-bucket computation across `rollup.py`, `attribution/`, and (as
+  first written) `impact/estimator.py` used
+  `CAST(created_at / 60 AS BIGINT)`. DuckDB's integer division `/` returns
+  a DOUBLE, and `CAST(DOUBLE AS BIGINT)` *rounds to nearest*, not
+  truncates — so an attempt at second 59 of a minute (fractional part
+  0.98) rounded UP into the next minute bucket. This under- and
+  over-counted attempts right at every window boundary, everywhere in the
+  codebase, since Phase 2 — invisible until the impact estimator's
+  affected-attempt count needed to be accurate to 5%, at which point a
+  4.8-9.7% error on episodes A and C made it impossible to ignore. Fixed
+  globally by switching to `(created_at // 60)`, DuckDB's actual floor
+  division. Confirmed the fix by comparing against a direct Polars
+  recomputation of the same filter, row by row, until the two matched
+  exactly.
+- After the rounding fix, episode C still showed 9.7% error. Traced it to
+  the *generator's* ramp function: `effect_fraction()` evaluates to
+  exactly 0 at `t == onset_min` and again at `t == recovery_end_min`, and
+  the engine's per-episode loop skips tagging `x_episode_id` entirely when
+  `frac <= 0`. So the two boundary minutes of every episode are genuinely,
+  by design, left untagged in ground truth, even though they're inside
+  the nominal `[onset, recovery_end]` window. Not a bug — the generator is
+  frozen and this is a legitimate property of a ramp reaching zero at its
+  own edges — but it means "true affected count" and "geometric
+  window count" differ by construction at exactly two minutes per
+  episode. Confirmed by checking that the estimator's count against a
+  *trimmed* window (`onset+1` to `recovery_end-1`) matches ground truth
+  exactly (0.0% error) on A, C, and E. The impact estimator itself reports
+  the full window in production — trimming is a test-only methodology
+  choice to isolate estimator accuracy from this one documented ground
+  truth quirk, not a change to what gets reported operationally.
+- The incident state machine's first version gated DEGRADED/SEVERE purely
+  on the upstream CUSUM alarm flag. That flag has no lower floor on its
+  accumulator, so after a severe, sustained drop it can stay latched
+  "true" for far longer than the drop itself lasted — a synthetic test
+  (40 minutes at a 35pp drop, then full recovery) needed *1,565* minutes
+  before the raw alarm cleared on its own. The FSM was trusting that stale
+  flag as if it meant "still degraded right now," so a metric that had
+  fully recovered to baseline kept reporting DEGRADED, and once nudged
+  toward RECOVERING it kept "relapsing" back to DEGRADED on every step
+  because the relapse check *also* trusted the same stale alarm-derived
+  target. Fixed by making `drop_pp` (the actual, current gap from
+  baseline) the primary signal everywhere in the FSM, with the alarm flag
+  only ever used to refine severity (DEGRADED vs SEVERE) once there is
+  already a real drop — never as a trigger on its own. This is the
+  clearest example so far of a lesson repeating across phases: a fast,
+  cheap signal (CUSUM's alarm bit) is a good *sequential detector* but a
+  bad source of truth for "what is happening right now" once its own
+  internal memory has decoupled from the present.
