@@ -37,7 +37,7 @@ from requirement to where the evidence will live.
 ## Quickstart
 
 ```bash
-cp .env.example .env   # fill in Razorpay test-mode keys + Anthropic key
+cp .env.example .env   # fill in Razorpay test-mode keys + Groq key
 make install
 make test-phase-0      # verifies Razorpay test-mode auth works
 ```
