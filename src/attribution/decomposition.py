@@ -22,6 +22,7 @@ from src.detection.hierarchical import bh_significant, one_sample_lower_pvalue
 from src.ingest.lattice_levels import dim_expr
 
 CANDIDATE_DIMS = ["x_psp", "x_issuer", "x_region", "x_merchant_id", "x_bin_prefix"]
+SUSTAIN_TOLERANCE = 0.03  # pp a half may sit above baseline and still count as "sustained"
 
 
 def _where(
@@ -132,8 +133,18 @@ def _decompose_by_dim(
 
         h1_sr = (h1_successes or 0) / h1_attempts if h1_attempts else None
         h2_sr = (h2_successes or 0) / h2_attempts if h2_attempts else None
-        sustained = (h1_sr is None or h1_sr < own_baseline) and (
-            h2_sr is None or h2_sr < own_baseline
+        # Neither half may sit *meaningfully above* baseline -- a fixed
+        # small tolerance, not a strict "< baseline" requirement. A window
+        # this function receives is only as tight as its caller's alarm
+        # boundary; a real incident's tail (CUSUM lags on recovery due to
+        # its own hysteresis) can land inside the window already back near
+        # baseline, and a strict "<" rejected that as if it were the same
+        # kind of noise as one half sitting *above* baseline. Genuine
+        # recovery reads as "back to normal"; noise reads as "anomalously
+        # good" -- this distinguishes them instead of conflating them. See
+        # docs/JOURNAL.md.
+        sustained = (h1_sr is None or h1_sr <= own_baseline + SUSTAIN_TOLERANCE) and (
+            h2_sr is None or h2_sr <= own_baseline + SUSTAIN_TOLERANCE
         )
         if not sustained:
             continue
