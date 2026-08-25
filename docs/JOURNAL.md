@@ -291,3 +291,18 @@ changes reference D, ep-A, or any other episode by name.
   cheaper text-grep the earlier ground-truth lint test already did — it
   would catch a violation hidden behind two or three hops of intermediate
   modules that a grep on the guarded directories alone would miss.
+- Once `GROQ_API_KEY` was actually added: the default model,
+  `llama-3.3-70b-versatile`, doesn't exist on this account
+  (`groq.NotFoundError: model_not_found`) — it silently fell back to the
+  template path every time (the broad `except Exception` in
+  `normalize.py`/`narrative.py` is deliberate fail-closed behavior, but it
+  also means a wrong model name looks identical to a real outage unless
+  you go check). Queried `client.models.list()` to see what this key
+  actually has access to and switched the default to
+  `openai/gpt-oss-120b`. One real response was also a reminder that a
+  live model won't always agree with our own taxonomy: normalizing an
+  "insufficient funds" (customer-side) error, the model classified it as
+  `category: bank` — schema-valid, semantically off. Not a bug to fix;
+  the point of the confidence field and the human-facing narrative is
+  that this kind of disagreement is expected and survivable, not that the
+  model is always right.
