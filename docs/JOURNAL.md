@@ -339,3 +339,32 @@ changes reference D, ep-A, or any other episode by name.
   believes. L10 reports one coherent, correctly-quantified incident on
   the same slice instead. `tests/test_quality_monitor.py` checks this
   directly, not just that L10 alone finds something.
+
+## Phase 11 — 2026-08-25
+
+- The MCP Python SDK installed at `mcp>=1.2` resolved to `2.1.0` — a major
+  version where `FastMCP` (the class every piece of MCP documentation I'd
+  seen names) no longer exists at `mcp.server.fastmcp`. `import
+  mcp.server.fastmcp` failed outright with `ModuleNotFoundError`.
+  Inspecting the installed package directly (`dir(mcp.server)`) showed the
+  same decorator-based API (`.tool()`, `.run()`, ...) under a renamed
+  class, `MCPServer`, importable straight from `mcp.server`. Swapped the
+  import and class name; nothing else about the server code needed to
+  change, since the interface itself is unchanged, just its name and
+  location.
+- `CallToolResult` in this SDK version uses `is_error` (snake_case), not
+  the `isError` name from the TypeScript-flavoured examples floating
+  around online — an `AttributeError` on the *first* real test run caught
+  it immediately, on a subprocess connection that had already succeeded
+  (server started, handshake completed, all three tools were actually
+  called) — the failure was purely in the test's own result-parsing, not
+  the server. Also found `structured_content` is populated directly for a
+  dict-returning tool, which is more convenient than parsing the text
+  content block as JSON — used that as the primary path instead.
+- The gate test launches the real server as a subprocess over stdio
+  (`python -m src.mcp.server`) and drives it through an actual
+  `ClientSession` — the same transport Claude Desktop uses — rather than
+  calling the Python tool functions in-process. That distinction is what
+  caught the `is_error` naming issue in the first place: an in-process
+  call to the plain functions would never have gone through
+  `CallToolResult` at all.
