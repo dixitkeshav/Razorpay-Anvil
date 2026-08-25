@@ -6,6 +6,7 @@ import pathlib
 
 import pytest
 
+from src.evaluation.recall import evaluate_recall
 from src.evaluation.replay import replay
 from src.evaluation.scorecard import render_results_md
 from src.generator.engine import SIM_START_EPOCH
@@ -14,10 +15,13 @@ from src.ingest.db import connect, register_events
 
 
 @pytest.fixture(scope="module")
-def con():
-    events_df, _ = generate(
-        seed=MAIN_SEED, sim_minutes=DEFAULT_SIM_MINUTES, start_epoch=SIM_START_EPOCH
-    )
+def generated():
+    return generate(seed=MAIN_SEED, sim_minutes=DEFAULT_SIM_MINUTES, start_epoch=SIM_START_EPOCH)
+
+
+@pytest.fixture(scope="module")
+def con(generated):
+    events_df, _ = generated
     c = connect()
     register_events(c, events_df)
     return c
@@ -26,6 +30,12 @@ def con():
 @pytest.fixture(scope="module")
 def scorecard(con):
     return replay(con, seed=MAIN_SEED)
+
+
+@pytest.fixture(scope="module")
+def recall(con, generated):
+    _, gt_df = generated
+    return evaluate_recall(con, gt_df, SIM_START_EPOCH // 60)
 
 
 def test_replay_finds_at_least_one_incident(scorecard):
@@ -71,13 +81,17 @@ def test_replay_is_deterministic_given_the_same_seed(con):
     assert first["decisions_by_action"] == second["decisions_by_action"]
 
 
-def test_scorecard_markdown_contains_the_actual_computed_numbers(scorecard):
-    content = render_results_md(scorecard, seed=MAIN_SEED, sim_minutes=DEFAULT_SIM_MINUTES)
+def test_scorecard_markdown_contains_the_actual_computed_numbers(scorecard, recall):
+    content = render_results_md(
+        scorecard, recall, seed=MAIN_SEED, sim_minutes=DEFAULT_SIM_MINUTES
+    )
     assert str(scorecard["attempts_replayed"]) in content
     assert str(scorecard["recovered_count"]) in content
     net_rupees = f"{scorecard['net_incremental_recovery_paise'] / 100:,.2f}"
     assert net_rupees in content
     assert "Rs. 0.00" in content  # agent-off, always
+    assert "Stratified recall" in content
+    assert "Failure taxonomy" in content
 
 
 def test_make_eval_writes_docs_results_md():
