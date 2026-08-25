@@ -262,3 +262,32 @@ changes reference D, ep-A, or any other episode by name.
   `docs/RESULTS.md` entirely by `make eval`, nothing hand-typed. The floor
   is complete: `make eval` emits a real rupee figure, agent-on vs
   agent-off, from the committed seed.
+
+## Phase 9 — 2026-08-25
+
+- The first version of `test_injection_defense.py` caught a real gap in
+  its own second test: `generate_incident_narrative`'s *template*
+  fallback (the path that never calls the model at all) blindly
+  interpolated `incident_summary["affected_attempts"]` into the summary
+  string. `incident_summary` is documented as trusted, already-computed
+  data — but the test fed it a string containing an injection payload
+  instead of the int it's supposed to be, simulating a plausible future
+  bug where untrusted text leaks into a field assumed safe upstream. The
+  fallback echoed it verbatim. Fixed by having the template validate the
+  field's *type* before interpolating it (only accept an actual `int`,
+  otherwise use a generic placeholder) — defense in depth for the one
+  path that doesn't touch the network at all, not just the one that does.
+- `GROQ_API_KEY` isn't actually set in `.env` yet (only the Razorpay
+  keys are) — despite the earlier decision to use Groq. `fixtures/
+  llm_cache.json` stays at `{}` rather than being pre-populated with
+  fabricated "real-looking" responses; every Phase 9 test exercises the
+  offline/template path exclusively (`tests/test_injection_defense.py`
+  proves this explicitly by monkeypatching `complete()` to raise if
+  called at all), so nothing is blocked on it. Live cache population is a
+  follow-up once a real key is added.
+- `tests/test_llm_cannot_reach_policy.py` is a real transitive-import
+  check (parses every file under `src/` with `ast`, builds the import
+  graph, walks reachability from each guarded package) rather than the
+  cheaper text-grep the earlier ground-truth lint test already did — it
+  would catch a violation hidden behind two or three hops of intermediate
+  modules that a grep on the guarded directories alone would miss.
