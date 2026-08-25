@@ -401,3 +401,41 @@ changes reference D, ep-A, or any other episode by name.
   underlying numbers correct) — a screenshot-timing quirk, not a data or
   rendering bug; confirmed by a second screenshot with a wait condition
   tied to the data having loaded rather than the page having mounted.
+
+## Phase 13 — 2026-08-25
+
+- `docs/RESULTS.md` switched from the main seed to the held-out set as its
+  data source, per docs/EPISODE-SPEC.md §7 ("headline metrics come from
+  the held-out set only"). Rather than read the on-disk parquet `make
+  holdout` writes, `run_eval.py` regenerates the held-out set in-memory
+  with the same seed — consistent with how it already worked for the main
+  seed since Phase 8, deterministic, and doesn't depend on `make holdout`
+  having run first.
+- Stratified recall on held-out data confirms exactly what Phase 3's
+  tuning predicted, not a new finding: 1/1 easy, 0/3 medium, 0/3 hard.
+  `h=15` was chosen specifically to hold false alarms at zero
+  (docs/JOURNAL.md Phase 3), and that same conservatism is what keeps
+  medium/hard episodes off the list here too. Tempting to read this as "the
+  detector doesn't work" — it's closer to "the detector was tuned to never
+  cry wolf, and this is the coverage that costs." Reported as-is in
+  docs/RESULTS.md's failure taxonomy rather than loosening the threshold
+  to make the numbers look better, which would just reopen the false-alarm
+  storm Phase 3 spent real effort closing.
+- decoy-volume-spike's slice dimension (merchant *category*) turned out
+  not to be one the lattice tests at any level — `x_merchant_category`
+  never appears in `src.ingest.lattice_levels.LEVELS` or
+  `src.attribution.CANDIDATE_DIMS`. A naive "did anything overlap this
+  decoy's time window" check would have scored it as a false alarm or a
+  pass somewhat arbitrarily, neither of which would mean anything real.
+  Excluded it from the decoy false-alarm count explicitly instead of
+  quietly picking one — reported as "untestable," which is the honest
+  answer.
+- The sensitivity sweep monkeypatches `src.policy.config`'s module
+  attributes per cell (48 cells x a full `replay()` run each) rather than
+  threading parameters through every call site — verified explicitly with
+  a dedicated test that global config is restored to its original values
+  afterward, since this whole test suite runs in one pytest process and a
+  leaked mutation would have silently changed every other test's behavior
+  depending on run order. All 48 cells came back positive on this
+  held-out draw — the honest number, not the plan's own illustrative "41
+  of 48" example, which was always a hypothetical, not a target to hit.
