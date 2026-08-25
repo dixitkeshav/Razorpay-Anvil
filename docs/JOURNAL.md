@@ -368,3 +368,36 @@ changes reference D, ep-A, or any other episode by name.
   caught the `is_error` naming issue in the first place: an in-process
   call to the plain functions would never have gone through
   `CallToolResult` at all.
+
+## Phase 12 — 2026-08-25
+
+- Docker Desktop wasn't running when this phase started (no daemon at
+  `~/.docker/run/docker.sock`). Verified the whole app — FastAPI backend,
+  React frontend, a full incident end to end — against local dev servers
+  and real Playwright screenshots first, then asked to have Docker started
+  rather than claim the literal gate ("loads from a clean docker compose
+  up") without ever having actually run that command.
+- First `docker compose up --build` produced two built images but only one
+  running container: `web` exited immediately. Its production stage tried
+  to selectively reinstall just `vite` and `@vitejs/plugin-react` via
+  `npm install --omit=dev vite @vitejs/plugin-react` after copying only
+  `dist` and `package.json` forward from the build stage — that install
+  silently ended up incomplete, and `vite preview`'s config loader fell
+  back to `npx` auto-installing vite on demand, grabbing an unpinned v8
+  (the project targets v5) that still couldn't resolve
+  `@vitejs/plugin-react` at all, since npx only auto-installs the one
+  package it was asked to run. Fixed by abandoning the selective-reinstall
+  approach entirely: copy the build stage's already-correct
+  `node_modules` forward as-is. Simpler, and there's no reinstall step
+  left to go wrong.
+- After the fix, both containers started and `web`'s internal proxy
+  (`vite preview`'s own `preview.proxy`, pointed at `http://api:8000` via
+  Docker Compose networking) correctly reached the `api` container --
+  confirmed with a screenshot of a full incident rendering end to end
+  against the actual `docker compose up` stack, not just local dev
+  servers. One cosmetic-only artifact: the Recharts bar chart on the ops
+  overview page was still mid-animation when the very first Docker
+  screenshot was captured (bars invisible, axes and labels present, all
+  underlying numbers correct) — a screenshot-timing quirk, not a data or
+  rendering bug; confirmed by a second screenshot with a wait condition
+  tied to the data having loaded rather than the page having mounted.
