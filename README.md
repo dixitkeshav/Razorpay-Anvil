@@ -11,10 +11,11 @@ Anvil is not a routing model, a fraud detector, or a subscription-recovery
 agent. See `docs/NON-GOALS.md` for the full list of what this deliberately
 is not, and why.
 
-Build status: **Floor complete (Phases 0-8).** `make eval` emits a real
-rupee recovery figure — see `docs/RESULTS.md` (generated). See
-`docs/PHASES.md` for the full 15-phase plan and gates; Phases 9-12 (LLM
-explanation, decision-quality monitor, MCP server, dashboard) are next.
+Build status: **Feature-complete through Phase 12** (floor + USP: LLM
+explanation, decision-quality monitor, MCP server, dashboard). `make eval`
+emits a real rupee recovery figure — see `docs/RESULTS.md` (generated).
+Feature freeze is now in effect per `docs/PHASES.md` — Phases 13-15
+(held-out evaluation, sensitivity sweep, docs, submission) are next.
 
 ---
 
@@ -41,16 +42,37 @@ from requirement to where the evidence will live.
 ```bash
 cp .env.example .env   # fill in Razorpay test-mode keys + Groq key
 make install
-make test             # full suite, all phase gates through Phase 8
-make eval              # regenerates docs/RESULTS.md from the committed seed
+make test              # full suite, all phase gates through Phase 12
+make eval               # regenerates docs/RESULTS.md from the committed seed
 ```
 
 `make sweep` (the sensitivity heatmap) and the held-out set land at Phase
-13 — `make reproduce` (which chains `seed`, `eval`, and `sweep`) will work
-end-to-end once that phase is in.
+13 — `make reproduce` (which chains `seed`, `eval`, and `sweep`) will
+regenerate every number in `docs/RESULTS.md` and `docs/SENSITIVITY.md`
+from a clean clone once that phase is in.
 
-will regenerate every number in `docs/RESULTS.md` and `docs/SENSITIVITY.md`
-from a clean clone.
+---
+
+## Dashboard
+
+```bash
+docker compose up --build
+```
+
+Ops overview at `http://localhost:5173`, API at `http://localhost:8000`.
+Both compute their state once, on first request, from the committed main
+seed — the same deterministic pipeline behind `make eval`. Click into any
+incident for the full detail view: attribution trace, affected merchants,
+and the Recovery Ledger.
+
+The Anvil MCP server (`src/mcp/server.py`) exposes the same incident data
+over the Model Context Protocol — `get_incident`, `explain_attribution`,
+`query_recovery_ledger` — for Claude Desktop, Claude Code, or any other
+MCP client:
+
+```bash
+.venv/bin/python -m src.mcp.server
+```
 
 ---
 
