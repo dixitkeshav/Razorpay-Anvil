@@ -57,8 +57,13 @@ def _method_states(con: duckdb.DuckDBPyConnection, method: str) -> dict[int, Fsm
     return dict(zip(minutes, states, strict=True))
 
 
-def replay(con: duckdb.DuckDBPyConnection, seed: int = 42) -> dict:
-    ledger = LedgerStore()
+def replay(
+    con: duckdb.DuckDBPyConnection, seed: int = 42, ledger: LedgerStore | None = None
+) -> dict:
+    """`ledger` defaults to a fresh, throwaway store. Pass one in to keep a
+    reference to the real entries afterward — src.mcp.server does this so
+    `query_recovery_ledger` has real data to serve."""
+    ledger = ledger if ledger is not None else LedgerStore()
     rng = random.Random(seed)
 
     incidents = detect_incidents(con, metric="sr")
