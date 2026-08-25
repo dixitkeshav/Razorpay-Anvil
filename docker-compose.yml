@@ -7,8 +7,6 @@ services:
       - "8000:8000"
     env_file:
       - .env
-    volumes:
-      - ./data:/app/data
 
   web:
     build:
@@ -16,5 +14,7 @@ services:
       dockerfile: Dockerfile
     ports:
       - "5173:5173"
+    environment:
+      ANVIL_API_URL: http://api:8000
     depends_on:
       - api
