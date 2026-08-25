@@ -37,6 +37,14 @@ entries only, written as they happen.
   120/min a narrow 3-way slice over only 14 minutes couldn't produce the
   ~340-attempt sample the positioning doc uses as its own example.
 
+## Phase 2 — 2026-08-24
+
+- No bugs — the fixture-based gate test for `src/ingest/rollup.py` passed
+  on the first run once `infer_schema_length` was set (a Phase 1 fix that
+  had already covered this case). Verified at scale against the real
+  502k-event dataset anyway: every lattice level from L0 to L4 resolves in
+  under half a second.
+
 ## Phase 3 — 2026-08-24
 
 - First CUSUM pass used the textbook Binomial(n,p) variance formula
