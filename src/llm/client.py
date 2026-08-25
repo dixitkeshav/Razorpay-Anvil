@@ -18,7 +18,7 @@ def get_client() -> Groq:
 
 
 def get_model() -> str:
-    return os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
+    return os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
 
 
 def complete(client: Groq, prompt: str, model: str | None = None) -> str:
