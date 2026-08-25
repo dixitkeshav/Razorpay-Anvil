@@ -11,11 +11,11 @@ Anvil is not a routing model, a fraud detector, or a subscription-recovery
 agent. See `docs/NON-GOALS.md` for the full list of what this deliberately
 is not, and why.
 
-Build status: **Feature-complete through Phase 12** (floor + USP: LLM
-explanation, decision-quality monitor, MCP server, dashboard). `make eval`
-emits a real rupee recovery figure — see `docs/RESULTS.md` (generated).
-Feature freeze is now in effect per `docs/PHASES.md` — Phases 13-15
-(held-out evaluation, sensitivity sweep, docs, submission) are next.
+Build status: **Held-out evaluation complete (Phase 13).** `docs/RESULTS.md`
+and `docs/SENSITIVITY.md` are generated from a held-out set — fresh seed,
+redrawn episode timing, never used to tune the detector or attribution —
+via `make holdout && make eval && make sweep`. Feature freeze has been in
+effect since Phase 12; Phases 14-15 (docs polish, submission) are next.
 
 ---
 
@@ -42,14 +42,18 @@ from requirement to where the evidence will live.
 ```bash
 cp .env.example .env   # fill in Razorpay test-mode keys + Groq key
 make install
-make test              # full suite, all phase gates through Phase 12
-make eval               # regenerates docs/RESULTS.md from the committed seed
+make test               # full suite, all phase gates through Phase 13
+make holdout             # writes data/holdout/ (the held-out set, generated once)
+make eval                # regenerates docs/RESULTS.md from the held-out set
+make sweep                # regenerates docs/SENSITIVITY.md — 48-cell parameter grid
 ```
 
-`make sweep` (the sensitivity heatmap) and the held-out set land at Phase
-13 — `make reproduce` (which chains `seed`, `eval`, and `sweep`) will
-regenerate every number in `docs/RESULTS.md` and `docs/SENSITIVITY.md`
-from a clean clone once that phase is in.
+`make reproduce` chains `seed`, `eval`, and `sweep` and will regenerate
+every number in `docs/RESULTS.md` and `docs/SENSITIVITY.md` from a clean
+clone — `eval` and `sweep` regenerate the held-out set in-memory
+themselves (same seed, deterministic), so they don't strictly depend on
+`make holdout` having been run first; `make holdout` exists to put the
+held-out parquet files on disk for separate inspection.
 
 ---
 
