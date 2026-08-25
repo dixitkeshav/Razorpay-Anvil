@@ -306,3 +306,36 @@ changes reference D, ep-A, or any other episode by name.
   the point of the confidence field and the human-facing narrative is
   that this kind of disagreement is expected and survivable, not that the
   model is always right.
+
+## Phase 10 — 2026-08-25
+
+- Same false-alarm-storm shape as Phase 3, in a new module: a first
+  version thresholding the raw per-minute (confidence - success_rate) gap
+  produced 619 "calibration drift incidents" on the committed main seed.
+  Root cause was the same lesson generalized: confidence tracks the true
+  underlying rate closely, but a raw per-minute success rate is a noisy
+  small-sample estimate of that same rate, so the *gap* between them
+  inherits nearly all of the success rate's own sampling noise. Fixed by
+  smoothing the gap before thresholding — same fix family as Phase 3's
+  CUSUM tuning, different signal.
+- The smoothing choice itself needed a second pass: an EWMA (matching the
+  style already used in src/detection/) has unbounded memory, and that
+  turned out to be the wrong property here. A "run" could climb high
+  early, decay too slowly to ever cross back below threshold within the
+  observed window, and get reported with hundreds of minutes of duration
+  whose *aggregate* gap — computed honestly from the genuinely elevated
+  raw minutes only — came out below the threshold that supposedly
+  triggered it. Incoherent as a report, and worse than useless for an
+  operator reading it. Switched to a bounded rolling-mean window (last 10
+  qualifying minutes): no long memory, so once the recent data is back
+  near baseline the smoothed signal is too, immediately. Episode F
+  (persistent, no changepoint, 180 minutes, the whole reason L10 exists)
+  is long enough to easily clear a 10-minute rolling window regardless.
+- Confirmed the core claim empirically, not just by construction: L2's
+  own `detect_incidents()` produces only single-minute fragments
+  (1-3 minutes each) on episode F's exact slice — because there's
+  genuinely no changepoint for a self-referential CUSUM to find when a
+  slice's true rate has *always* been this far from what the oracle
+  believes. L10 reports one coherent, correctly-quantified incident on
+  the same slice instead. `tests/test_quality_monitor.py` checks this
+  directly, not just that L10 alone finds something.
