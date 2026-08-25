@@ -23,3 +23,6 @@ web/dist/
 
 # os
 .DS_Store
+
+# harness-local state, not part of the project
+.claude/
