@@ -8,8 +8,11 @@ the same deterministic pipeline (detect -> attribute -> impact -> policy
 -> execute) already gated in Phases 3-8.
 """
 
+import threading
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
 
 from src.attribution.decomposition import find_minimal_cut
 from src.detection.detector import detect_incidents
@@ -19,6 +22,8 @@ from src.generator.seed import DEFAULT_SIM_MINUTES, MAIN_SEED, generate
 from src.impact.estimator import estimate_impact
 from src.ingest.db import connect, register_events
 from src.ledger.store import LedgerStore
+from src.llm.cache import LlmCache
+from src.llm.qa import answer_question
 
 app = FastAPI(title="Anvil")
 app.add_middleware(
@@ -29,12 +34,40 @@ app.add_middleware(
 )
 
 _state: dict = {}
+_state_lock = threading.Lock()
+_qa_cache = LlmCache()  # in-memory only for this process; never .save()d, so the
+# committed fixtures/llm_cache.json is never mutated by a live API request
+
+
+def _get_llm_client():
+    """Best-effort Groq client for the /api/qa endpoint. Never raises --
+    any failure to configure a live client (offline mode, missing key,
+    import error) falls back to answer_question()'s own template path,
+    same fail-closed contract as src.llm.narrative."""
+    from src.llm.client import is_offline
+
+    if is_offline():
+        return None
+    try:
+        from src.llm.client import get_client
+
+        return get_client()
+    except Exception:
+        return None
 
 
 def _load_state() -> dict:
     if _state:
         return _state
 
+    with _state_lock:
+        if _state:
+            return _state
+        _compute_state()
+    return _state
+
+
+def _compute_state() -> None:
     events_df, _ = generate(
         seed=MAIN_SEED, sim_minutes=DEFAULT_SIM_MINUTES, start_epoch=SIM_START_EPOCH
     )
@@ -55,7 +88,6 @@ def _load_state() -> dict:
     _state["incidents"] = incidents
     _state["ledger"] = ledger
     _state["scorecard"] = scorecard
-    return _state
 
 
 def _incident_summary(index: int, entry: dict) -> dict:
@@ -71,9 +103,33 @@ def _incident_summary(index: int, entry: dict) -> dict:
     }
 
 
+class QARequest(BaseModel):
+    question: str = Field(min_length=1, max_length=500)
+
+
 @app.get("/api/health")
 def health() -> dict:
     return {"status": "ok"}
+
+
+@app.post("/api/qa")
+def qa(req: QARequest) -> dict:
+    """Answer an operator's question (e.g. "why are payments failing",
+    "which PSP is down") using only already-detected incident data.
+    Read-only: calls no code path that can execute a payment action.
+    The question is untrusted user text and is fenced before it ever
+    reaches a prompt -- see src.llm.prompts.incident_qa_prompt."""
+    incidents = _load_state()["incidents"]
+    summaries = [_incident_summary(i, entry) for i, entry in enumerate(incidents)]
+
+    result = answer_question(
+        req.question,
+        summaries,
+        cache=_qa_cache,
+        client=_get_llm_client(),
+        offline=False,
+    )
+    return result.model_dump()
 
 
 @app.get("/api/scorecard")
