@@ -1,6 +1,9 @@
 services:
+  # Single service: the root Dockerfile builds the dashboard (web/) in an
+  # earlier stage and bundles the static output into the API image, so
+  # FastAPI serves both the SPA and /api/* on one Render URL.
   - type: web
-    name: anvil-api
+    name: anvil
     env: docker
     dockerfilePath: ./Dockerfile
     dockerContext: .
@@ -19,18 +22,3 @@ services:
         value: openai/gpt-oss-120b
       - key: ANVIL_LLM_OFFLINE
         value: "0"
-
-  - type: web
-    name: anvil-web
-    env: docker
-    dockerfilePath: ./web/Dockerfile
-    dockerContext: ./web
-    plan: free
-    envVars:
-      # Render's private network resolves other services in the same
-      # blueprint by name, on the port each one declares via its own
-      # PORT env var (anvil-api listens on 8000, see above).
-      - key: ANVIL_API_URL
-        value: http://anvil-api:8000
-      - key: PORT
-        value: 5173

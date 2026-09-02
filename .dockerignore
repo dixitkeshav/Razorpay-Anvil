@@ -8,7 +8,8 @@ __pycache__
 .mypy_cache
 data
 docs
-web
+web/node_modules
+web/dist
 node_modules
 *.egg-info
 .env

@@ -9,9 +9,12 @@ the same deterministic pipeline (detect -> attribute -> impact -> policy
 """
 
 import threading
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from src.attribution.decomposition import find_minimal_cut
@@ -32,6 +35,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# The built dashboard (web/dist, produced by the Dockerfile's web-build
+# stage) is served from this same process so the whole app is reachable
+# behind a single Render URL -- see the catch-all route at the bottom of
+# this file, registered after every /api/* route so it never shadows them.
+_WEB_DIST = Path(__file__).resolve().parents[2] / "web" / "dist"
 
 _state: dict = {}
 _state_lock = threading.Lock()
@@ -202,3 +211,14 @@ def get_incident_ledger(incident_index: int, limit: int = 100) -> dict:
             for e in entries
         ],
     }
+
+
+if _WEB_DIST.is_dir():
+    app.mount("/assets", StaticFiles(directory=_WEB_DIST / "assets"), name="web-assets")
+
+    @app.get("/{full_path:path}")
+    def spa(full_path: str) -> FileResponse:
+        candidate = _WEB_DIST / full_path
+        if candidate.is_file():
+            return FileResponse(candidate)
+        return FileResponse(_WEB_DIST / "index.html")
