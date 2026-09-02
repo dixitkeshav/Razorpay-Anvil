@@ -48,8 +48,23 @@ export type Scorecard = {
   recovered_count: number;
 };
 
+export type QAAnswer = {
+  answer: string;
+  incident_indices: number[];
+};
+
 async function getJson<T>(path: string): Promise<T> {
   const res = await fetch(`/api${path}`);
+  if (!res.ok) throw new Error(`${path} -> ${res.status}`);
+  return res.json() as Promise<T>;
+}
+
+async function postJson<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`/api${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
   if (!res.ok) throw new Error(`${path} -> ${res.status}`);
   return res.json() as Promise<T>;
 }
@@ -63,6 +78,7 @@ export const api = {
     getJson<{ total: number; entries: LedgerEntry[] }>(
       `/incidents/${index}/ledger?limit=${limit}`,
     ),
+  ask: (question: string) => postJson<QAAnswer>("/qa", { question }),
 };
 
 export function paise(p: number): string {
