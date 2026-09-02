@@ -19,3 +19,8 @@ class IncidentNarrative(BaseModel):
     headline: str = Field(max_length=120)
     summary: str = Field(max_length=800)
     recommended_reading: str = Field(max_length=280)
+
+
+class IncidentQAAnswer(BaseModel):
+    answer: str = Field(max_length=800)
+    incident_indices: list[int] = Field(default_factory=list)
