@@ -18,7 +18,7 @@ WORKDIR /app
 # up missing, and `vite preview`'s config loader fell back to npx
 # auto-installing an unpinned, incompatible major version of vite at
 # container start. Copying the whole directory is simpler and has no such
-# failure mode. See docs/JOURNAL.md.
+# failure mode.
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/package.json ./

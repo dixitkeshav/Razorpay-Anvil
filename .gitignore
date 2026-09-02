@@ -26,3 +26,10 @@ web/dist/
 
 # harness-local state, not part of the project
 .claude/
+
+# internal planning/working docs — not part of the public repo;
+# README.md is the only committed documentation
+CLAUDE.md
+anvil-build-plan.md
+docs/
+experiments/
